@@ -1,2 +1,3 @@
 id,date,dow,opponent,opponentType,opponentCustom,stance,stadium,stadiumType,stadiumCustom,cancel,scoreMyTeam,scoreOpponent,comment,satisfaction
 1777199753224,2026-04-09,木,阪神タイガース,阪神タイガース,,ビジター,東京ドーム,東京ドーム,,false,15,16,jkl,2
+1777200039041,2026-04-26,日,千葉ロッテマリーンズ,千葉ロッテマリーンズ,,ビジター,みずほPayPayドーム福岡,みずほPayPayドーム福岡,,false,7,9,,1
