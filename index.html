@@ -1,0 +1,2160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚾ 野球観戦記録アプリ</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    /* ===== RESET & BASE ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #1a2a4a;
+      --navy-light: #243558;
+      --red: #c0392b;
+      --red-light: #e74c3c;
+      --gold: #f39c12;
+      --gold-light: #f1c40f;
+      --white: #ffffff;
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --border: #dde3ec;
+      --text: #2c3e50;
+      --text-muted: #7f8c9a;
+      --win: #27ae60;
+      --lose: #e74c3c;
+      --draw: #95a5a6;
+      --cancel: #bdc3c7;
+      --radius: 12px;
+      --shadow: 0 2px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+    }
+    html { font-size: 15px; }
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Meiryo', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ===== HEADER ===== */
+    header {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+      color: var(--white);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.05em; }
+    header h1 span { color: var(--gold-light); }
+
+    /* ===== TAB NAV ===== */
+    .tab-nav {
+      display: flex;
+      background: var(--navy);
+      padding: 0 16px;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tab-nav::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.6);
+      padding: 12px 20px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      white-space: nowrap;
+      letter-spacing: 0.03em;
+    }
+    .tab-btn:hover { color: var(--white); }
+    .tab-btn.active {
+      color: var(--gold-light);
+      border-bottom-color: var(--gold-light);
+    }
+
+    /* ===== MAIN CONTENT ===== */
+    .tab-content { display: none; padding: 24px 16px; max-width: 1100px; margin: 0 auto; }
+    .tab-content.active { display: block; }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 18px;
+      background: var(--red);
+      border-radius: 2px;
+    }
+
+    /* ===== STAT GRID ===== */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+      color: var(--white);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      text-align: center;
+    }
+    .stat-box .label { font-size: 0.75rem; opacity: 0.75; margin-bottom: 6px; }
+    .stat-box .value { font-size: 1.8rem; font-weight: 700; color: var(--gold-light); }
+    .stat-box .sub { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; }
+
+    /* ===== RECORD BADGES ===== */
+    .record-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .badge-win { background: #d5f5e3; color: var(--win); }
+    .badge-lose { background: #fde8e8; color: var(--lose); }
+    .badge-draw { background: #eaecee; color: #555; }
+    .badge-cancel { background: #f2f3f4; color: #888; }
+
+    /* ===== CHART WRAPPER ===== */
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+    .chart-wrap-wide {
+      position: relative;
+      width: 100%;
+      height: 280px;
+    }
+    .chart-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    /* ===== FORM STYLES ===== */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.82rem; font-weight: 600; color: var(--navy); }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: #fff;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--navy);
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-group.full { grid-column: 1 / -1; }
+
+    /* ===== STAR RATING ===== */
+    .star-rating { display: flex; gap: 6px; flex-direction: row-reverse; }
+    .star-rating input[type="radio"] { display: none; }
+    .star-rating label {
+      font-size: 1.8rem;
+      cursor: pointer;
+      color: #ddd;
+      transition: color 0.15s;
+    }
+    .star-rating label:hover,
+    .star-rating label:hover ~ label { color: var(--gold); }
+    .star-rating input[type="radio"]:checked ~ label { color: var(--gold); }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 700;
+      transition: all 0.2s;
+      letter-spacing: 0.03em;
+    }
+    .btn-primary { background: var(--navy); color: var(--white); }
+    .btn-primary:hover { background: var(--navy-light); transform: translateY(-1px); }
+    .btn-danger { background: var(--red); color: var(--white); }
+    .btn-danger:hover { background: var(--red-light); }
+    .btn-warning { background: var(--gold); color: var(--white); }
+    .btn-warning:hover { background: var(--gold-light); color: var(--text); }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--navy);
+      color: var(--navy);
+    }
+    .btn-outline:hover { background: var(--navy); color: var(--white); }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+    .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+    /* ===== TABLE ===== */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th {
+      background: var(--navy);
+      color: var(--white);
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr:hover td { background: #f7f9fc; }
+    .result-win { color: var(--win); font-weight: 700; }
+    .result-lose { color: var(--lose); font-weight: 700; }
+    .result-draw { color: #666; font-weight: 700; }
+    .result-cancel { color: #aaa; }
+
+    /* ===== RECENT GAMES ===== */
+    .recent-list { display: flex; flex-direction: column; gap: 10px; }
+    .recent-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: #f7f9fc;
+      border-left: 4px solid var(--border);
+    }
+    .recent-item.win { border-left-color: var(--win); }
+    .recent-item.lose { border-left-color: var(--lose); }
+    .recent-item.draw { border-left-color: var(--draw); }
+    .recent-item.cancel { border-left-color: var(--cancel); }
+    .recent-date { font-size: 0.78rem; color: var(--text-muted); min-width: 80px; }
+    .recent-team { font-weight: 700; flex: 1; }
+    .recent-score { font-size: 1.1rem; font-weight: 700; min-width: 60px; text-align: center; }
+    .recent-result { font-size: 0.82rem; font-weight: 700; min-width: 36px; text-align: center; }
+
+    /* ===== MODAL ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 28px;
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+    }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--navy);
+      color: var(--white);
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      z-index: 300;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { background: var(--win); }
+    .toast.error { background: var(--red); }
+
+    /* ===== STANDINGS TABLE ===== */
+    .standings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .league-table th { background: var(--navy-light); }
+
+    /* ===== STADIUM CHART SECTION ===== */
+    .stadium-chart-container {
+      width: 100%;
+      height: 400px;
+      margin-top: 10px;
+    }
+
+    /* ===== FILTER BAR ===== */
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    .filter-bar input,
+    .filter-bar select {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: #fff;
+    }
+    .filter-bar input:focus,
+    .filter-bar select:focus { outline: none; border-color: var(--navy); }
+
+    /* ===== STREAK BADGE ===== */
+    .streak-box {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .streak-item {
+      flex: 1;
+      min-width: 200px;
+      background: #f7f9fc;
+      border-radius: 10px;
+      padding: 16px;
+      border-left: 4px solid var(--navy);
+    }
+    .streak-item .s-label { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; }
+    .streak-item .s-value { font-size: 1.4rem; font-weight: 700; color: var(--navy); }
+    .streak-item .s-period { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* ===== RANKING LIST ===== */
+    .rank-list { list-style: none; }
+    .rank-list li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .rank-list li:last-child { border-bottom: none; }
+    .rank-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .rank-num.gold { background: #f39c12; }
+    .rank-num.silver { background: #95a5a6; }
+    .rank-num.bronze { background: #cd7f32; }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.95rem; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 600px) {
+      .tab-btn { padding: 10px 14px; font-size: 0.82rem; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .card { padding: 16px; }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ===== CHECKBOX STYLE ===== */
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
+    }
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--navy);
+    }
+    .checkbox-group label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    /* ===== SECTION DIVIDER ===== */
+    .section-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 20px 0;
+    }
+
+    /* ===== SATISFACTION STARS DISPLAY ===== */
+    .stars-display { color: var(--gold); letter-spacing: 1px; }
+
+    /* ===== YEAR TABS ===== */
+    .sub-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .sub-tab-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 2px solid var(--border);
+      background: #fff;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sub-tab-btn.active {
+      background: var(--navy);
+      color: var(--white);
+      border-color: var(--navy);
+    }
+
+    /* ===== IMPORT/EXPORT ===== */
+    .io-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .github-sync-bar {
+      background: #f8f9fa;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .github-sync-bar h3 {
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      color: var(--navy);
+    }
+    .github-config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .github-config-grid input {
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚾ 野球観戦<span>記録</span>アプリ</h1>
+  <div style="font-size:0.78rem;opacity:0.6;">Baseball Watching Log</div>
+</header>
+
+<nav class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('top')">🏠 TOP</button>
+  <button class="tab-btn" onclick="switchTab('record')">📝 試合記録</button>
+  <button class="tab-btn" onclick="switchTab('stats')">📊 通算成績</button>
+  <button class="tab-btn" onclick="switchTab('detail')">📋 試合詳細</button>
+</nav>
+
+<!-- ===================== TOP TAB ===================== -->
+<div id="tab-top" class="tab-content active">
+
+  <div class="stat-grid" id="top-stat-grid">
+    <div class="stat-box">
+      <div class="label">通算試合数</div>
+      <div class="value" id="top-total">0</div>
+      <div class="sub">試合</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">通算勝率</div>
+      <div class="value" id="top-winrate">-.---</div>
+      <div class="sub">（中止除く）</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">勝利数</div>
+      <div class="value" id="top-wins" style="color:#7dcea0;">0</div>
+      <div class="sub">勝</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">敗戦数</div>
+      <div class="value" id="top-loses" style="color:#f1948a;">0</div>
+      <div class="sub">敗</div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <div class="card-title">通算成績</div>
+      <div class="chart-wrap">
+        <canvas id="chart-top-overall"></canvas>
+      </div>
+      <div id="top-overall-legend" style="text-align:center;margin-top:12px;font-size:0.85rem;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">ホーム成績</div>
+      <div class="chart-wrap">
+        <canvas id="chart-top-home"></canvas>
+      </div>
+      <div id="top-home-legend" style="text-align:center;margin-top:12px;font-size:0.85rem;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">ビジター成績</div>
+      <div class="chart-wrap">
+        <canvas id="chart-top-visitor"></canvas>
+      </div>
+      <div id="top-visitor-legend" style="text-align:center;margin-top:12px;font-size:0.85rem;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">直近5試合の結果</div>
+    <div id="top-recent-list" class="recent-list">
+      <div class="empty-state"><div class="icon">⚾</div><p>試合記録がありません</p></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===================== RECORD TAB ===================== -->
+<div id="tab-record" class="tab-content">
+  <div class="card">
+    <div class="card-title">試合を記録する</div>
+
+    <div class="form-grid">
+      <!-- 日付 -->
+      <div class="form-group">
+        <label>📅 日付</label>
+        <input type="date" id="f-date" onchange="updateDayOfWeek()" />
+      </div>
+      <div class="form-group">
+        <label>曜日</label>
+        <input type="text" id="f-dow" readonly placeholder="日付を選択" style="background:#f7f9fc;" />
+      </div>
+
+      <!-- 相手チーム -->
+      <div class="form-group">
+        <label>🆚 相手チーム</label>
+        <select id="f-opponent" onchange="toggleOpponentInput()">
+          <option value="">選択してください</option>
+          <optgroup label="セ・リーグ">
+            <option value="読売ジャイアンツ">読売ジャイアンツ</option>
+            <option value="阪神タイガース">阪神タイガース</option>
+            <option value="横浜DeNAベイスターズ">横浜DeNAベイスターズ</option>
+            <option value="広島東洋カープ">広島東洋カープ</option>
+            <option value="中日ドラゴンズ">中日ドラゴンズ</option>
+            <option value="東京ヤクルトスワローズ">東京ヤクルトスワローズ</option>
+          </optgroup>
+          <optgroup label="パ・リーグ">
+            <option value="福岡ソフトバンクホークス">福岡ソフトバンクホークス</option>
+            <option value="オリックス・バファローズ">オリックス・バファローズ</option>
+            <option value="千葉ロッテマリーンズ">千葉ロッテマリーンズ</option>
+            <option value="東北楽天ゴールデンイーグルス">東北楽天ゴールデンイーグルス</option>
+            <option value="埼玉西武ライオンズ">埼玉西武ライオンズ</option>
+            <option value="北海道日本ハムファイターズ">北海道日本ハムファイターズ</option>
+          </optgroup>
+          <optgroup label="その他">
+            <option value="__intl__">国際試合</option>
+            <option value="__other__">その他</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group" id="f-opponent-custom-wrap" style="display:none;">
+        <label id="f-opponent-custom-label">チーム名 / 国名</label>
+        <input type="text" id="f-opponent-custom" placeholder="入力してください" />
+      </div>
+
+      <!-- 立場 -->
+      <div class="form-group">
+        <label>🏟️ 立場</label>
+        <select id="f-stance">
+          <option value="ホーム">ホーム</option>
+          <option value="ビジター">ビジター</option>
+        </select>
+      </div>
+
+      <!-- 球場 -->
+      <div class="form-group">
+        <label>📍 球場</label>
+        <select id="f-stadium" onchange="toggleStadiumInput()">
+          <option value="">選択してください</option>
+          <optgroup label="セ・リーグ本拠地">
+            <option value="東京ドーム">東京ドーム（読売）</option>
+            <option value="甲子園球場">甲子園球場（阪神）</option>
+            <option value="横浜スタジアム">横浜スタジアム（DeNA）</option>
+            <option value="MAZDA Zoom-Zoom スタジアム広島">MAZDA Zoom-Zoom スタジアム広島（広島）</option>
+            <option value="バンテリンドームナゴヤ">バンテリンドームナゴヤ（中日）</option>
+            <option value="明治神宮野球場">明治神宮野球場（ヤクルト）</option>
+          </optgroup>
+          <optgroup label="パ・リーグ本拠地">
+            <option value="みずほPayPayドーム福岡">みずほPayPayドーム福岡（ソフトバンク）</option>
+            <option value="京セラドーム大阪">京セラドーム大阪（オリックス）</option>
+            <option value="ZOZOマリンスタジアム">ZOZOマリンスタジアム（ロッテ）</option>
+            <option value="楽天モバイルパーク宮城">楽天モバイルパーク宮城（楽天）</option>
+            <option value="ベルーナドーム">ベルーナドーム（西武）</option>
+            <option value="エスコンフィールドHOKKAIDO">エスコンフィールドHOKKAIDO（日本ハム）</option>
+          </optgroup>
+          <optgroup label="その他">
+            <option value="__other__">その他</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group" id="f-stadium-custom-wrap" style="display:none;">
+        <label>球場名</label>
+        <input type="text" id="f-stadium-custom" placeholder="球場名を入力" />
+      </div>
+    </div>
+
+    <!-- 中止チェック -->
+    <div class="checkbox-group" style="margin-top:12px;">
+      <input type="checkbox" id="f-cancel" onchange="toggleCancelMode()" />
+      <label for="f-cancel">⚠️ 試合中止</label>
+    </div>
+
+    <div id="score-section" class="form-grid" style="margin-top:12px;">
+      <div class="form-group">
+        <label>🔢 自チームの得点</label>
+        <select id="f-score-my">
+          <option value="">選択</option>
+          <script>for(let i=0;i<=30;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>🔢 相手チームの得点</label>
+        <select id="f-score-opp">
+          <option value="">選択</option>
+          <script>for(let i=0;i<=30;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid" style="margin-top:12px;">
+      <div class="form-group full">
+        <label>💬 コメント</label>
+        <textarea id="f-comment" placeholder="試合の感想・メモ"></textarea>
+      </div>
+      <div class="form-group">
+        <label>⭐ 満足度</label>
+        <div class="star-rating" id="star-rating-input">
+          <input type="radio" id="star5" name="satisfaction" value="5" />
+          <label for="star5">★</label>
+          <input type="radio" id="star4" name="satisfaction" value="4" />
+          <label for="star4">★</label>
+          <input type="radio" id="star3" name="satisfaction" value="3" />
+          <label for="star3">★</label>
+          <input type="radio" id="star2" name="satisfaction" value="2" />
+          <label for="star2">★</label>
+          <input type="radio" id="star1" name="satisfaction" value="1" />
+          <label for="star1">★</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveRecord()">💾 保存する</button>
+      <button class="btn btn-outline" onclick="clearForm()">🔄 クリア</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">データ管理</div>
+    
+    <div class="github-sync-bar">
+      <h3>🔗 GitHub API連携設定（自動書き換え）</h3>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;">
+        GitHub APIを使用して、アプリ上での操作を直接CSVファイルに反映させます。
+      </p>
+      <div class="github-config-grid">
+        <input type="text" id="gh-user" placeholder="GitHubユーザー名">
+        <input type="text" id="gh-repo" placeholder="リポジトリ名">
+        <input type="text" id="gh-path" placeholder="ファイルパス (例: data.csv)">
+        <input type="password" id="gh-token" placeholder="個人用アクセストークン (PAT)">
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="btn btn-primary btn-sm" onclick="saveGithubConfig()">設定を保存</button>
+        <button class="btn btn-outline btn-sm" onclick="fetchGithubCSV()">最新データを取得</button>
+        <div class="checkbox-group" style="padding:0; margin:0;">
+          <input type="checkbox" id="gh-auto-sync" checked>
+          <label for="gh-auto-sync" style="font-size:0.75rem;">操作時に自動コミット</label>
+        </div>
+      </div>
+      <p id="sync-status" style="font-size:0.75rem; margin-top:8px; color:var(--win);"></p>
+    </div>
+
+    <div class="io-bar">
+      <button class="btn btn-outline" onclick="exportCSV()">📤 CSVエクスポート</button>
+      <label class="btn btn-outline" style="cursor:pointer;">
+        📥 CSVインポート
+        <input type="file" accept=".csv" id="csv-import" style="display:none;" onchange="importCSV(event)" />
+      </label>
+    </div>
+    <p style="font-size:0.8rem;color:var(--text-muted);">
+      ※ 通常データはブラウザのLocalStorageに保存されます。GitHub連携時は、GitHubのCSVが優先されます。
+    </p>
+  </div>
+</div>
+
+<!-- ===================== STATS TAB ===================== -->
+<div id="tab-stats" class="tab-content">
+
+  <!-- 通算成績 -->
+  <div class="chart-row">
+    <div class="card">
+      <div class="card-title">通算成績（円グラフ）</div>
+      <div class="chart-wrap">
+        <canvas id="chart-stats-overall"></canvas>
+      </div>
+      <div id="stats-overall-legend" style="text-align:center;margin-top:12px;font-size:0.85rem;"></div>
+    </div>
+    <div class="card" style="flex:2;min-width:280px;">
+      <div class="card-title">戦績推移（折れ線グラフ）</div>
+      <div class="chart-wrap-wide">
+        <canvas id="chart-stats-trend"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 年度別成績 -->
+  <div class="card">
+    <div class="card-title">年度別成績</div>
+    <div id="year-tabs" class="sub-tabs"></div>
+    <div class="chart-row">
+      <div class="chart-wrap">
+        <canvas id="chart-year-pie"></canvas>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <div id="year-stats-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- チーム別成績 -->
+  <div class="card">
+    <div class="card-title">チーム別成績</div>
+    <div class="standings-grid">
+      <div>
+        <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-size:0.9rem;">セ・リーグ</div>
+        <div class="table-wrap" id="team-table-cl"></div>
+      </div>
+      <div>
+        <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-size:0.9rem;">パ・リーグ</div>
+        <div class="table-wrap" id="team-table-pl"></div>
+      </div>
+      <div>
+        <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-size:0.9rem;">その他</div>
+        <div class="table-wrap" id="team-table-other"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 曜日別成績 -->
+  <div class="card">
+    <div class="card-title">曜日別成績</div>
+    <div class="chart-wrap-wide">
+      <canvas id="chart-dow"></canvas>
+    </div>
+  </div>
+
+  <!-- ベスト・ワースト -->
+  <div class="chart-row">
+    <div class="card">
+      <div class="card-title">⭐ ベスト試合 TOP5</div>
+      <div id="best-games-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">💔 ワースト試合 TOP5</div>
+      <div id="worst-games-list"></div>
+    </div>
+  </div>
+
+  <!-- 球場訪問ランキング -->
+  <div class="card">
+    <div class="card-title">🏟️ 球場訪問ランキング TOP5</div>
+    <ul class="rank-list" id="stadium-rank-list"></ul>
+  </div>
+
+  <!-- 球場別勝率（棒グラフ） -->
+  <div class="card">
+    <div class="card-title">📍 球場別勝率</div>
+    <div class="stadium-chart-container">
+      <canvas id="chart-stadium-winrate"></canvas>
+    </div>
+  </div>
+
+  <!-- 連勝・連敗 -->
+  <div class="card">
+    <div class="card-title">🔥 連勝・連敗記録</div>
+    <div class="streak-box" id="streak-box">
+      <div class="streak-item">
+        <div class="s-label">最多連勝</div>
+        <div class="s-value" id="max-win-streak">0連勝</div>
+        <div class="s-period" id="max-win-period">—</div>
+      </div>
+      <div class="streak-item">
+        <div class="s-label">最多連敗</div>
+        <div class="s-value" id="max-lose-streak">0連敗</div>
+        <div class="s-period" id="max-lose-period">—</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===================== DETAIL TAB ===================== -->
+<div id="tab-detail" class="tab-content">
+  <div class="card">
+    <div class="card-title">試合一覧</div>
+    <div class="filter-bar">
+      <input type="text" id="detail-search" placeholder="🔍 チーム・球場・コメントで検索" oninput="renderDetailTable()" style="flex:1;min-width:180px;" />
+      <select id="detail-year-filter" onchange="renderDetailTable()">
+        <option value="">全年度</option>
+      </select>
+      <select id="detail-result-filter" onchange="renderDetailTable()">
+        <option value="">全結果</option>
+        <option value="勝">勝</option>
+        <option value="負">負</option>
+        <option value="引き分け">引き分け</option>
+        <option value="中止">中止</option>
+      </select>
+      <select id="detail-sort" onchange="renderDetailTable()">
+        <option value="asc">日付昇順</option>
+        <option value="desc">日付降順</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table id="detail-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>日付</th>
+            <th>曜日</th>
+            <th>相手</th>
+            <th>立場</th>
+            <th>球場</th>
+            <th>スコア</th>
+            <th>結果</th>
+            <th>満足度</th>
+            <th>コメント</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="detail-tbody"></tbody>
+      </table>
+    </div>
+    <div id="detail-empty" class="empty-state" style="display:none;">
+      <div class="icon">📋</div>
+      <p>試合記録がありません</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EDIT MODAL ===================== -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-title">✏️ 試合記録を編集</div>
+    <input type="hidden" id="edit-idx" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label>📅 日付</label>
+        <input type="date" id="e-date" onchange="updateEditDayOfWeek()" />
+      </div>
+      <div class="form-group">
+        <label>曜日</label>
+        <input type="text" id="e-dow" readonly style="background:#f7f9fc;" />
+      </div>
+      <div class="form-group">
+        <label>🆚 相手チーム</label>
+        <select id="e-opponent" onchange="toggleEditOpponentInput()">
+          <option value="">選択してください</option>
+          <optgroup label="セ・リーグ">
+            <option value="読売ジャイアンツ">読売ジャイアンツ</option>
+            <option value="阪神タイガース">阪神タイガース</option>
+            <option value="横浜DeNAベイスターズ">横浜DeNAベイスターズ</option>
+            <option value="広島東洋カープ">広島東洋カープ</option>
+            <option value="中日ドラゴンズ">中日ドラゴンズ</option>
+            <option value="東京ヤクルトスワローズ">東京ヤクルトスワローズ</option>
+          </optgroup>
+          <optgroup label="パ・リーグ">
+            <option value="福岡ソフトバンクホークス">福岡ソフトバンクホークス</option>
+            <option value="オリックス・バファローズ">オリックス・バファローズ</option>
+            <option value="千葉ロッテマリーンズ">千葉ロッテマリーンズ</option>
+            <option value="東北楽天ゴールデンイーグルス">東北楽天ゴールデンイーグルス</option>
+            <option value="埼玉西武ライオンズ">埼玉西武ライオンズ</option>
+            <option value="北海道日本ハムファイターズ">北海道日本ハムファイターズ</option>
+          </optgroup>
+          <optgroup label="その他">
+            <option value="__intl__">国際試合</option>
+            <option value="__other__">その他</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group" id="e-opponent-custom-wrap" style="display:none;">
+        <label id="e-opponent-custom-label">チーム名 / 国名</label>
+        <input type="text" id="e-opponent-custom" />
+      </div>
+      <div class="form-group">
+        <label>🏟️ 立場</label>
+        <select id="e-stance">
+          <option value="ホーム">ホーム</option>
+          <option value="ビジター">ビジター</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>📍 球場</label>
+        <select id="e-stadium" onchange="toggleEditStadiumInput()">
+          <option value="">選択してください</option>
+          <optgroup label="セ・リーグ本拠地">
+            <option value="東京ドーム">東京ドーム（読売）</option>
+            <option value="甲子園球場">甲子園球場（阪神）</option>
+            <option value="横浜スタジアム">横浜スタジアム（DeNA）</option>
+            <option value="MAZDA Zoom-Zoom スタジアム広島">MAZDA Zoom-Zoom スタジアム広島（広島）</option>
+            <option value="バンテリンドームナゴヤ">バンテリンドームナゴヤ（中日）</option>
+            <option value="明治神宮野球場">明治神宮野球場（ヤクルト）</option>
+          </optgroup>
+          <optgroup label="パ・リーグ本拠地">
+            <option value="みずほPayPayドーム福岡">みずほPayPayドーム福岡（ソフトバンク）</option>
+            <option value="京セラドーム大阪">京セラドーム大阪（オリックス）</option>
+            <option value="ZOZOマリンスタジアム">ZOZOマリンスタジアム（ロッテ）</option>
+            <option value="楽天モバイルパーク宮城">楽天モバイルパーク宮城（楽天）</option>
+            <option value="ベルーナドーム">ベルーナドーム（西武）</option>
+            <option value="エスコンフィールドHOKKAIDO">エスコンフィールドHOKKAIDO（日本ハム）</option>
+          </optgroup>
+          <optgroup label="その他">
+            <option value="__other__">その他</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group" id="e-stadium-custom-wrap" style="display:none;">
+        <label>球場名</label>
+        <input type="text" id="e-stadium-custom" />
+      </div>
+    </div>
+    <div class="checkbox-group" style="margin-top:12px;">
+      <input type="checkbox" id="e-cancel" onchange="toggleEditCancelMode()" />
+      <label for="e-cancel">⚠️ 試合中止</label>
+    </div>
+    <div id="e-score-section" class="form-grid" style="margin-top:12px;">
+      <div class="form-group">
+        <label>🔢 自チームの得点</label>
+        <select id="e-score-my">
+          <option value="">選択</option>
+          <script>for(let i=0;i<=30;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>🔢 相手チームの得点</label>
+        <select id="e-score-opp">
+          <option value="">選択</option>
+          <script>for(let i=0;i<=30;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid" style="margin-top:12px;">
+      <div class="form-group full">
+        <label>💬 コメント</label>
+        <textarea id="e-comment"></textarea>
+      </div>
+      <div class="form-group">
+        <label>⭐ 満足度</label>
+        <div class="star-rating" id="edit-star-rating">
+          <input type="radio" id="e-star5" name="e-satisfaction" value="5" />
+          <label for="e-star5">★</label>
+          <input type="radio" id="e-star4" name="e-satisfaction" value="4" />
+          <label for="e-star4">★</label>
+          <input type="radio" id="e-star3" name="e-satisfaction" value="3" />
+          <label for="e-star3">★</label>
+          <input type="radio" id="e-star2" name="e-satisfaction" value="2" />
+          <label for="e-star2">★</label>
+          <input type="radio" id="e-star1" name="e-satisfaction" value="1" />
+          <label for="e-star1">★</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeEditModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== DELETE CONFIRM MODAL ===================== -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title">🗑️ 削除確認</div>
+    <p style="margin-bottom:16px;">この試合記録を削除しますか？この操作は取り消せません。</p>
+    <input type="hidden" id="delete-idx" />
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeDeleteModal()">キャンセル</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TOAST ===================== -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  DATA LAYER
+// ============================================================
+const STORAGE_KEY = 'baseball_records_v2';
+const GH_CONFIG_KEY = 'baseball_github_config';
+
+const TEAMS_CL = ['読売ジャイアンツ','阪神タイガース','横浜DeNAベイスターズ','広島東洋カープ','中日ドラゴンズ','東京ヤクルトスワローズ'];
+const TEAMS_PL = ['福岡ソフトバンクホークス','オリックス・バファローズ','千葉ロッテマリーンズ','東北楽天ゴールデンイーグルス','埼玉西武ライオンズ','北海道日本ハムファイターズ'];
+const STADIUMS_MAIN = ['東京ドーム','甲子園球場','横浜スタジアム','MAZDA Zoom-Zoom スタジアム広島','バンテリンドームナゴヤ','明治神宮野球場','みずほPayPayドーム福岡','京セラドーム大阪','ZOZOマリンスタジアム','楽天モバイルパーク宮城','ベルーナドーム','エスコンフィールドHOKKAIDO'];
+
+// 球場の地図座標（SVGのviewBox 500x600内）
+const STADIUM_COORDS = {
+  '東京ドーム':           {x: 345, y: 285},
+  '明治神宮野球場':       {x: 330, y: 295},
+  '横浜スタジアム':       {x: 355, y: 310},
+  '甲子園球場':           {x: 200, y: 335},
+  '京セラドーム大阪':     {x: 195, y: 330},
+  'バンテリンドームナゴヤ':{x: 255, y: 305},
+  'MAZDA Zoom-Zoom スタジアム広島': {x: 135, y: 350},
+  'みずほPayPayドーム福岡':{x: 100, y: 470},
+  'ZOZOマリンスタジアム': {x: 370, y: 280},
+  '楽天モバイルパーク宮城':{x: 360, y: 175},
+  'ベルーナドーム':        {x: 330, y: 275},
+  'エスコンフィールドHOKKAIDO': {x: 370, y: 90},
+};
+
+const DAYS = ['日','月','火','水','木','金','土'];
+
+function loadRecords() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function saveRecords(records) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
+function getResult(rec) {
+  if (rec.cancel) return '中止';
+  const my = parseInt(rec.scoreMyTeam);
+  const opp = parseInt(rec.scoreOpponent);
+  if (isNaN(my) || isNaN(opp)) return '—';
+  if (my > opp) return '勝';
+  if (my < opp) return '負';
+  return '引き分け';
+}
+
+function getOpponentDisplay(rec) {
+  if (rec.opponentType === '__intl__') return `🌐 ${rec.opponentCustom}`;
+  if (rec.opponentType === '__other__') return rec.opponentCustom;
+  return rec.opponent;
+}
+
+function getStadiumDisplay(rec) {
+  if (rec.stadiumType === '__other__') return rec.stadiumCustom;
+  return rec.stadium;
+}
+
+function starsHTML(n) {
+  if (!n) return '<span style="color:#ccc;">未評価</span>';
+  return '<span class="stars-display">' + '★'.repeat(n) + '☆'.repeat(5-n) + '</span>';
+}
+
+// ============================================================
+//  TAB SWITCHING
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.currentTarget.classList.add('active');
+
+  if (tab === 'top') renderTop();
+  if (tab === 'stats') renderStats();
+  if (tab === 'detail') renderDetailTable();
+}
+
+// ============================================================
+//  FORM HELPERS
+// ============================================================
+function updateDayOfWeek() {
+  const d = document.getElementById('f-date').value;
+  if (!d) { document.getElementById('f-dow').value = ''; return; }
+  const dt = new Date(d + 'T00:00:00');
+  document.getElementById('f-dow').value = DAYS[dt.getDay()] + '曜日';
+}
+
+function updateEditDayOfWeek() {
+  const d = document.getElementById('e-date').value;
+  if (!d) { document.getElementById('e-dow').value = ''; return; }
+  const dt = new Date(d + 'T00:00:00');
+  document.getElementById('e-dow').value = DAYS[dt.getDay()] + '曜日';
+}
+
+function toggleOpponentInput() {
+  const v = document.getElementById('f-opponent').value;
+  const wrap = document.getElementById('f-opponent-custom-wrap');
+  const lbl = document.getElementById('f-opponent-custom-label');
+  if (v === '__intl__') { wrap.style.display = ''; lbl.textContent = '国名'; }
+  else if (v === '__other__') { wrap.style.display = ''; lbl.textContent = 'チーム名'; }
+  else { wrap.style.display = 'none'; }
+}
+
+function toggleEditOpponentInput() {
+  const v = document.getElementById('e-opponent').value;
+  const wrap = document.getElementById('e-opponent-custom-wrap');
+  const lbl = document.getElementById('e-opponent-custom-label');
+  if (v === '__intl__') { wrap.style.display = ''; lbl.textContent = '国名'; }
+  else if (v === '__other__') { wrap.style.display = ''; lbl.textContent = 'チーム名'; }
+  else { wrap.style.display = 'none'; }
+}
+
+function toggleStadiumInput() {
+  const v = document.getElementById('f-stadium').value;
+  document.getElementById('f-stadium-custom-wrap').style.display = v === '__other__' ? '' : 'none';
+}
+
+function toggleEditStadiumInput() {
+  const v = document.getElementById('e-stadium').value;
+  document.getElementById('e-stadium-custom-wrap').style.display = v === '__other__' ? '' : 'none';
+}
+
+function toggleCancelMode() {
+  const checked = document.getElementById('f-cancel').checked;
+  document.getElementById('score-section').style.opacity = checked ? '0.3' : '1';
+  document.getElementById('score-section').style.pointerEvents = checked ? 'none' : '';
+}
+
+function toggleEditCancelMode() {
+  const checked = document.getElementById('e-cancel').checked;
+  document.getElementById('e-score-section').style.opacity = checked ? '0.3' : '1';
+  document.getElementById('e-score-section').style.pointerEvents = checked ? 'none' : '';
+}
+
+function clearForm() {
+  document.getElementById('f-date').value = '';
+  document.getElementById('f-dow').value = '';
+  document.getElementById('f-opponent').value = '';
+  document.getElementById('f-opponent-custom-wrap').style.display = 'none';
+  document.getElementById('f-opponent-custom').value = '';
+  document.getElementById('f-stance').value = 'ホーム';
+  document.getElementById('f-stadium').value = '';
+  document.getElementById('f-stadium-custom-wrap').style.display = 'none';
+  document.getElementById('f-stadium-custom').value = '';
+  document.getElementById('f-cancel').checked = false;
+  document.getElementById('score-section').style.opacity = '1';
+  document.getElementById('score-section').style.pointerEvents = '';
+  document.getElementById('f-score-my').value = '';
+  document.getElementById('f-score-opp').value = '';
+  document.getElementById('f-comment').value = '';
+  document.querySelectorAll('input[name="satisfaction"]').forEach(r => r.checked = false);
+}
+
+// ============================================================
+//  SAVE RECORD
+// ============================================================
+async function saveRecord() {
+  const date = document.getElementById('f-date').value;
+  if (!date) { showToast('日付を入力してください', 'error'); return; }
+  const opponentSel = document.getElementById('f-opponent').value;
+  if (!opponentSel) { showToast('相手チームを選択してください', 'error'); return; }
+  const stadiumSel = document.getElementById('f-stadium').value;
+  if (!stadiumSel) { showToast('球場を選択してください', 'error'); return; }
+
+  const dt = new Date(date + 'T00:00:00');
+  const dow = DAYS[dt.getDay()];
+  const cancel = document.getElementById('f-cancel').checked;
+  const opponentCustom = document.getElementById('f-opponent-custom').value.trim();
+  const stadiumCustom = document.getElementById('f-stadium-custom').value.trim();
+
+  if ((opponentSel === '__intl__' || opponentSel === '__other__') && !opponentCustom) {
+    showToast('チーム名/国名を入力してください', 'error'); return;
+  }
+  if (stadiumSel === '__other__' && !stadiumCustom) {
+    showToast('球場名を入力してください', 'error'); return;
+  }
+
+  const satEl = document.querySelector('input[name="satisfaction"]:checked');
+
+  const rec = {
+    id: Date.now(),
+    date,
+    dow,
+    opponent: opponentSel === '__intl__' || opponentSel === '__other__' ? opponentCustom : opponentSel,
+    opponentType: opponentSel,
+    opponentCustom,
+    stance: document.getElementById('f-stance').value,
+    stadium: stadiumSel === '__other__' ? stadiumCustom : stadiumSel,
+    stadiumType: stadiumSel,
+    stadiumCustom,
+    cancel,
+    scoreMyTeam: cancel ? '-' : document.getElementById('f-score-my').value,
+    scoreOpponent: cancel ? '-' : document.getElementById('f-score-opp').value,
+    comment: document.getElementById('f-comment').value.trim(),
+    satisfaction: satEl ? parseInt(satEl.value) : 0,
+  };
+
+  const records = loadRecords();
+  records.push(rec);
+  saveRecords(records);
+  clearForm();
+  showToast('試合記録を保存しました ⚾', 'success');
+  
+  if (document.getElementById('gh-auto-sync').checked) {
+    await pushToGithub('試合記録の追加');
+  }
+}
+
+// ============================================================
+//  TOAST
+// ============================================================
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  setTimeout(() => { t.className = 'toast'; }, 2800);
+}
+
+// ============================================================
+//  CSV EXPORT / IMPORT
+// ============================================================
+function exportCSV() {
+  const records = loadRecords();
+  if (!records.length) { showToast('記録がありません', 'error'); return; }
+  const headers = ['id','date','dow','opponent','opponentType','opponentCustom','stance','stadium','stadiumType','stadiumCustom','cancel','scoreMyTeam','scoreOpponent','comment','satisfaction'];
+  const rows = records.map(r => headers.map(h => {
+    let v = r[h] === undefined ? '' : r[h];
+    if (typeof v === 'string' && (v.includes(',') || v.includes('"') || v.includes('\n'))) {
+      v = '"' + v.replace(/"/g, '""') + '"';
+    }
+    return v;
+  }).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'baseball_records.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSVをエクスポートしました', 'success');
+}
+
+function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const text = e.target.result.replace(/^\uFEFF/, '');
+      const result = Papa.parse(text, {header: true, skipEmptyLines: true});
+      const records = result.data.map(r => ({
+        ...r,
+        cancel: r.cancel === 'true',
+        satisfaction: parseInt(r.satisfaction) || 0,
+      }));
+      saveRecords(records);
+      showToast(`${records.length}件のデータをインポートしました`, 'success');
+      renderTop();
+    } catch(err) {
+      showToast('インポートに失敗しました', 'error');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = '';
+}
+
+// ============================================================
+//  CHART HELPERS
+// ============================================================
+const chartInstances = {};
+
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+function makePieChart(canvasId, wins, loses, draws, cancels) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  const data = [wins, loses, draws, cancels].filter((v,i) => v > 0 || i < 2);
+  const labels = ['勝', '負', '引き分け', '中止'].filter((v,i) => [wins,loses,draws,cancels][i] > 0 || i < 2);
+  const colors = ['#27ae60','#e74c3c','#95a5a6','#bdc3c7'];
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: [wins, loses, draws, cancels],
+        backgroundColor: colors,
+        borderWidth: 2,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.raw}試合`
+          }
+        }
+      }
+    }
+  });
+}
+
+function legendHTML(wins, loses, draws, cancels) {
+  const total = wins + loses + draws + cancels;
+  const pct = n => total ? (n/total*100).toFixed(1) : '0.0';
+  let html = '';
+  if (wins) html += `<span style="color:var(--win)">●勝 ${wins}(${pct(wins)}%)</span> `;
+  if (loses) html += `<span style="color:var(--lose)">●負 ${loses}(${pct(loses)}%)</span> `;
+  if (draws) html += `<span style="color:#666">●分 ${draws}(${pct(draws)}%)</span> `;
+  if (cancels) html += `<span style="color:#aaa">●中止 ${cancels}(${pct(cancels)}%)</span>`;
+  if (!total) html = '<span style="color:#aaa">データなし</span>';
+  return html;
+}
+
+function calcWLDC(records) {
+  let w=0,l=0,d=0,c=0;
+  records.forEach(r => {
+    const res = getResult(r);
+    if (res==='勝') w++;
+    else if (res==='負') l++;
+    else if (res==='引き分け') d++;
+    else if (res==='中止') c++;
+  });
+  return {w,l,d,c};
+}
+
+// ============================================================
+//  TOP TAB
+// ============================================================
+function renderTop() {
+  const records = loadRecords();
+  const all = calcWLDC(records);
+  const total = records.length;
+  const validGames = all.w + all.l + all.d;
+  const winrate = validGames > 0 ? (all.w / validGames).toFixed(3) : '-.---';
+
+  document.getElementById('top-total').textContent = total;
+  document.getElementById('top-winrate').textContent = winrate;
+  document.getElementById('top-wins').textContent = all.w;
+  document.getElementById('top-loses').textContent = all.l;
+
+  // Overall pie
+  makePieChart('chart-top-overall', all.w, all.l, all.d, all.c);
+  document.getElementById('top-overall-legend').innerHTML = legendHTML(all.w, all.l, all.d, all.c);
+
+  // Home pie
+  const homeRecs = records.filter(r => r.stance === 'ホーム');
+  const home = calcWLDC(homeRecs);
+  makePieChart('chart-top-home', home.w, home.l, home.d, home.c);
+  document.getElementById('top-home-legend').innerHTML = legendHTML(home.w, home.l, home.d, home.c);
+
+  // Visitor pie
+  const visitorRecs = records.filter(r => r.stance === 'ビジター');
+  const visitor = calcWLDC(visitorRecs);
+  makePieChart('chart-top-visitor', visitor.w, visitor.l, visitor.d, visitor.c);
+  document.getElementById('top-visitor-legend').innerHTML = legendHTML(visitor.w, visitor.l, visitor.d, visitor.c);
+
+  // Recent 5
+  const sorted = [...records].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const listEl = document.getElementById('top-recent-list');
+  if (!sorted.length) {
+    listEl.innerHTML = '<div class="empty-state"><div class="icon">⚾</div><p>試合記録がありません</p></div>';
+    return;
+  }
+  listEl.innerHTML = sorted.map(r => {
+    const res = getResult(r);
+    const cls = res==='勝'?'win':res==='負'?'lose':res==='引き分け'?'draw':'cancel';
+    const score = r.cancel ? '中止' : `${r.scoreMyTeam} - ${r.scoreOpponent}`;
+    const resColor = res==='勝'?'var(--win)':res==='負'?'var(--lose)':'#888';
+    return `<div class="recent-item ${cls}">
+      <div class="recent-date">${r.date}<br/><span style="font-size:0.72rem;">${r.dow}</span></div>
+      <div class="recent-team">vs ${getOpponentDisplay(r)}<br/><span style="font-size:0.75rem;color:var(--text-muted);">${getStadiumDisplay(r)}</span></div>
+      <div class="recent-score">${score}</div>
+      <div class="recent-result" style="color:${resColor};">${res}</div>
+      <div>${starsHTML(r.satisfaction)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+//  STATS TAB
+// ============================================================
+function renderStats() {
+  const records = loadRecords();
+
+  // Overall pie
+  const all = calcWLDC(records);
+  makePieChart('chart-stats-overall', all.w, all.l, all.d, all.c);
+  document.getElementById('stats-overall-legend').innerHTML = legendHTML(all.w, all.l, all.d, all.c);
+
+  // Trend line
+  renderTrendChart(records);
+
+  // Year tabs
+  renderYearTabs(records);
+
+  // Team tables
+  renderTeamTables(records);
+
+  // DOW chart
+  renderDowChart(records);
+
+  // Best/Worst
+  renderBestWorst(records);
+
+  // Stadium rank
+  renderStadiumRank(records);
+
+  // Stadium Winrate Chart
+  renderStadiumWinrateChart(records);
+
+  // Streaks
+  renderStreaks(records);
+}
+
+function renderTrendChart(records) {
+  destroyChart('chart-stats-trend');
+  const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
+  let score = 0;
+  const labels = [];
+  const data = [];
+  sorted.forEach((r, i) => {
+    const res = getResult(r);
+    if (res === '勝') score++;
+    else if (res === '負') score--;
+    labels.push(`#${i+1}`);
+    data.push(score);
+  });
+  if (!sorted.length) {
+    labels.push(''); data.push(0);
+  }
+  const ctx = document.getElementById('chart-stats-trend').getContext('2d');
+  chartInstances['chart-stats-trend'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: '通算スコア',
+        data,
+        borderColor: '#1a2a4a',
+        backgroundColor: 'rgba(26,42,74,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: data.length > 50 ? 0 : 4,
+        pointBackgroundColor: data.map(v => v >= 0 ? '#27ae60' : '#e74c3c'),
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { grid: { color: '#eee' }, ticks: { stepSize: 1 } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } }
+      }
+    }
+  });
+}
+
+function renderYearTabs(records) {
+  const years = [...new Set(records.map(r => r.date.slice(0,4)))].sort();
+  const tabsEl = document.getElementById('year-tabs');
+  if (!years.length) {
+    tabsEl.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">データなし</span>';
+    document.getElementById('year-stats-table').innerHTML = '';
+    destroyChart('chart-year-pie');
+    return;
+  }
+  const allYears = ['全体', ...years];
+  tabsEl.innerHTML = allYears.map((y, i) =>
+    `<button class="sub-tab-btn${i===0?' active':''}" onclick="selectYearTab('${y}', this)">${y}</button>`
+  ).join('');
+  renderYearContent('全体', records);
+}
+
+function selectYearTab(year, btn) {
+  document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const records = loadRecords();
+  renderYearContent(year, records);
+}
+
+function renderYearContent(year, allRecords) {
+  const records = year === '全体' ? allRecords : allRecords.filter(r => r.date.startsWith(year));
+  const {w,l,d,c} = calcWLDC(records);
+  makePieChart('chart-year-pie', w, l, d, c);
+
+  const validGames = w + l + d;
+  const wr = validGames > 0 ? (w/validGames).toFixed(3) : '-.---';
+  const sats = records.filter(r => r.satisfaction > 0).map(r => r.satisfaction);
+  const avgSat = sats.length ? (sats.reduce((a,b)=>a+b,0)/sats.length).toFixed(2) : '—';
+
+  document.getElementById('year-stats-table').innerHTML = `
+    <table>
+      <tr><th>項目</th><th>値</th></tr>
+      <tr><td>試合数</td><td>${records.length}</td></tr>
+      <tr><td>勝</td><td style="color:var(--win);font-weight:700;">${w}</td></tr>
+      <tr><td>負</td><td style="color:var(--lose);font-weight:700;">${l}</td></tr>
+      <tr><td>引き分け</td><td>${d}</td></tr>
+      <tr><td>中止</td><td>${c}</td></tr>
+      <tr><td>勝率</td><td><strong>${wr}</strong></td></tr>
+      <tr><td>平均満足度</td><td>${avgSat !== '—' ? starsHTML(Math.round(parseFloat(avgSat))) + ` (${avgSat})` : '—'}</td></tr>
+    </table>`;
+}
+
+function renderTeamTables(records) {
+  function makeTable(teams, recs) {
+    if (!teams.length) return '<p style="color:var(--text-muted);font-size:0.85rem;padding:8px;">データなし</p>';
+    const rows = teams.map(team => {
+      const tr = recs.filter(r => r.opponent === team || (r.opponentType !== '__intl__' && r.opponentType !== '__other__' && r.opponent === team));
+      const {w,l,d,c} = calcWLDC(tr);
+      const valid = w+l+d;
+      const wr = valid > 0 ? (w/valid).toFixed(3) : '-.---';
+      return `<tr>
+        <td>${team.replace('東北楽天ゴールデンイーグルス','楽天').replace('北海道日本ハムファイターズ','日本ハム').replace('横浜DeNAベイスターズ','DeNA').replace('東京ヤクルトスワローズ','ヤクルト').replace('福岡ソフトバンクホークス','ソフトバンク').replace('オリックス・バファローズ','オリックス').replace('千葉ロッテマリーンズ','ロッテ').replace('埼玉西武ライオンズ','西武')}</td>
+        <td>${tr.length}</td>
+        <td style="color:var(--win)">${w}</td>
+        <td style="color:var(--lose)">${l}</td>
+        <td>${d}</td>
+        <td>${wr}</td>
+      </tr>`;
+    }).join('');
+    return `<table><thead><tr><th>チーム</th><th>試</th><th>勝</th><th>負</th><th>分</th><th>勝率</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  // CL
+  const clRecs = records.filter(r => TEAMS_CL.includes(r.opponent));
+  document.getElementById('team-table-cl').innerHTML = makeTable(TEAMS_CL, clRecs);
+
+  // PL
+  const plRecs = records.filter(r => TEAMS_PL.includes(r.opponent));
+  document.getElementById('team-table-pl').innerHTML = makeTable(TEAMS_PL, plRecs);
+
+  // Other
+  const otherRecs = records.filter(r => !TEAMS_CL.includes(r.opponent) && !TEAMS_PL.includes(r.opponent));
+  const otherTeams = [...new Set(otherRecs.map(r => r.opponent))];
+  document.getElementById('team-table-other').innerHTML = makeTable(otherTeams, otherRecs);
+}
+
+function renderDowChart(records) {
+  destroyChart('chart-dow');
+  const dowLabels = ['日','月','火','水','木','金','土'];
+  const wins = new Array(7).fill(0);
+  const loses = new Array(7).fill(0);
+  const draws = new Array(7).fill(0);
+  const cancels = new Array(7).fill(0);
+  records.forEach(r => {
+    const dt = new Date(r.date + 'T00:00:00');
+    const idx = dt.getDay();
+    const res = getResult(r);
+    if (res==='勝') wins[idx]++;
+    else if (res==='負') loses[idx]++;
+    else if (res==='引き分け') draws[idx]++;
+    else if (res==='中止') cancels[idx]++;
+  });
+  const ctx = document.getElementById('chart-dow').getContext('2d');
+  chartInstances['chart-dow'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dowLabels,
+      datasets: [
+        { label: '勝', data: wins, backgroundColor: '#27ae60' },
+        { label: '負', data: loses, backgroundColor: '#e74c3c' },
+        { label: '引き分け', data: draws, backgroundColor: '#95a5a6' },
+        { label: '中止', data: cancels, backgroundColor: '#ddd' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+}
+
+function renderBestWorst(records) {
+  const rated = records.filter(r => r.satisfaction > 0);
+  const best = [...rated].sort((a,b) => b.satisfaction - a.satisfaction || b.date.localeCompare(a.date)).slice(0,5);
+  const worst = [...rated].sort((a,b) => a.satisfaction - b.satisfaction || a.date.localeCompare(b.date)).slice(0,5);
+
+  function gameCard(r) {
+    const res = getResult(r);
+    const score = r.cancel ? '中止' : `${r.scoreMyTeam}-${r.scoreOpponent}`;
+    const resColor = res==='勝'?'var(--win)':res==='負'?'var(--lose)':'#888';
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.8rem;color:var(--text-muted);">${r.date} (${r.dow})</span>
+        <span style="font-weight:700;color:${resColor};">${score} ${res}</span>
+      </div>
+      <div style="font-weight:600;margin:4px 0;">vs ${getOpponentDisplay(r)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.8rem;color:var(--text-muted);">${getStadiumDisplay(r)}</span>
+        <span>${starsHTML(r.satisfaction)}</span>
+      </div>
+      ${r.comment ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">"${r.comment}"</div>` : ''}
+    </div>`;
+  }
+
+  document.getElementById('best-games-list').innerHTML = best.length
+    ? best.map(gameCard).join('')
+    : '<div class="empty-state" style="padding:24px;"><p>データなし</p></div>';
+  document.getElementById('worst-games-list').innerHTML = worst.length
+    ? worst.map(gameCard).join('')
+    : '<div class="empty-state" style="padding:24px;"><p>データなし</p></div>';
+}
+
+function renderStadiumRank(records) {
+  const counts = {};
+  records.forEach(r => {
+    const s = getStadiumDisplay(r);
+    counts[s] = (counts[s] || 0) + 1;
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
+  const colors = ['gold','silver','bronze','',''];
+  const el = document.getElementById('stadium-rank-list');
+  if (!sorted.length) { el.innerHTML = '<li style="color:var(--text-muted);padding:12px 0;">データなし</li>'; return; }
+  el.innerHTML = sorted.map(([name, cnt], i) =>
+    `<li>
+      <div class="rank-num ${colors[i]}">${i+1}</div>
+      <div style="flex:1;font-weight:600;">${name}</div>
+      <div style="color:var(--text-muted);font-size:0.85rem;">${cnt}回</div>
+    </li>`
+  ).join('');
+}
+
+function renderStadiumWinrateChart(records) {
+  destroyChart('chart-stadium-winrate');
+  const ctx = document.getElementById('chart-stadium-winrate').getContext('2d');
+
+  const stadiumData = {};
+  records.forEach(r => {
+    const s = getStadiumDisplay(r);
+    if (!stadiumData[s]) stadiumData[s] = {w:0,l:0,d:0,c:0,total:0};
+    const res = getResult(r);
+    if (res==='勝') stadiumData[s].w++;
+    else if (res==='負') stadiumData[s].l++;
+    else if (res==='引き分け') stadiumData[s].d++;
+    else if (res==='中止') stadiumData[s].c++;
+    stadiumData[s].total++;
+  });
+
+  const sorted = Object.entries(stadiumData)
+    .sort((a,b) => b[1].total - a[1].total)
+    .slice(0, 15);
+
+  const labels = sorted.map(d => d[0]);
+  const wins = sorted.map(d => d[1].w);
+  const loses = sorted.map(d => d[1].l);
+  const draws = sorted.map(d => d[1].d);
+  const cancels = sorted.map(d => d[1].c);
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '勝', data: wins, backgroundColor: '#27ae60' },
+        { label: '負', data: loses, backgroundColor: '#e74c3c' },
+        { label: '分', data: draws, backgroundColor: '#95a5a6' },
+        { label: '中止', data: cancels, backgroundColor: '#bdc3c7' }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            afterLabel: (context) => {
+              const d = sorted[context.dataIndex][1];
+              const wr = (d.w / (d.w + d.l || 1) * 100).toFixed(1);
+              return `勝率: ${wr}% (中止除く)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, title: { display: true, text: '試合数' } },
+        y: { stacked: true }
+      }
+    }
+  });
+}
+
+function renderStreaks(records) {
+  const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
+
+  let maxWin = 0, maxWinStart = '', maxWinEnd = '';
+  let maxLose = 0, maxLoseStart = '', maxLoseEnd = '';
+  let curWin = 0, curWinStart = '';
+  let curLose = 0, curLoseStart = '';
+
+  sorted.forEach(r => {
+    const res = getResult(r);
+    if (res === '勝') {
+      if (curWin === 0) curWinStart = r.date;
+      curWin++;
+      curLose = 0;
+      if (curWin > maxWin) { maxWin = curWin; maxWinStart = curWinStart; maxWinEnd = r.date; }
+    } else if (res === '負') {
+      if (curLose === 0) curLoseStart = r.date;
+      curLose++;
+      curWin = 0;
+      if (curLose > maxLose) { maxLose = curLose; maxLoseStart = curLoseStart; maxLoseEnd = r.date; }
+    } else {
+      curWin = 0; curLose = 0;
+    }
+  });
+
+  document.getElementById('max-win-streak').textContent = `${maxWin}連勝`;
+  document.getElementById('max-win-period').textContent = maxWin > 0 ? `${maxWinStart} 〜 ${maxWinEnd}` : '—';
+  document.getElementById('max-lose-streak').textContent = `${maxLose}連敗`;
+  document.getElementById('max-lose-period').textContent = maxLose > 0 ? `${maxLoseStart} 〜 ${maxLoseEnd}` : '—';
+}
+
+// ============================================================
+//  DETAIL TAB
+// ============================================================
+function renderDetailTable() {
+  const records = loadRecords();
+  const search = document.getElementById('detail-search').value.toLowerCase();
+  const yearFilter = document.getElementById('detail-year-filter').value;
+  const resultFilter = document.getElementById('detail-result-filter').value;
+  const sortDir = document.getElementById('detail-sort').value;
+
+  // Update year filter options
+  const years = [...new Set(records.map(r => r.date.slice(0,4)))].sort();
+  const yearSel = document.getElementById('detail-year-filter');
+  const currentYear = yearSel.value;
+  yearSel.innerHTML = '<option value="">全年度</option>' + years.map(y => `<option value="${y}"${y===currentYear?' selected':''}>${y}年</option>`).join('');
+
+  let filtered = records.filter(r => {
+    const res = getResult(r);
+    const matchSearch = !search ||
+      getOpponentDisplay(r).toLowerCase().includes(search) ||
+      getStadiumDisplay(r).toLowerCase().includes(search) ||
+      (r.comment || '').toLowerCase().includes(search);
+    const matchYear = !yearFilter || r.date.startsWith(yearFilter);
+    const matchResult = !resultFilter || res === resultFilter;
+    return matchSearch && matchYear && matchResult;
+  });
+
+  filtered.sort((a,b) => sortDir === 'asc' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+
+  const tbody = document.getElementById('detail-tbody');
+  const emptyEl = document.getElementById('detail-empty');
+
+  if (!filtered.length) {
+    tbody.innerHTML = '';
+    emptyEl.style.display = '';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  tbody.innerHTML = filtered.map((r, i) => {
+    const res = getResult(r);
+    const resClass = res==='勝'?'result-win':res==='負'?'result-lose':res==='引き分け'?'result-draw':'result-cancel';
+    const score = r.cancel ? '<span class="result-cancel">中止</span>' : `${r.scoreMyTeam} - ${r.scoreOpponent}`;
+    const origIdx = records.indexOf(r);
+    return `<tr>
+      <td style="color:var(--text-muted);">${i+1}</td>
+      <td style="white-space:nowrap;">${r.date}</td>
+      <td>${r.dow}</td>
+      <td style="font-weight:600;">${getOpponentDisplay(r)}</td>
+      <td><span class="badge ${r.stance==='ホーム'?'badge-win':'badge-lose'}">${r.stance}</span></td>
+      <td style="font-size:0.82rem;">${getStadiumDisplay(r)}</td>
+      <td style="text-align:center;font-weight:700;">${score}</td>
+      <td class="${resClass}">${res}</td>
+      <td>${starsHTML(r.satisfaction)}</td>
+      <td style="max-width:160px;font-size:0.8rem;color:var(--text-muted);">${r.comment || ''}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-warning btn-sm" onclick="openEditModal(${origIdx})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${origIdx})">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+//  EDIT MODAL
+// ============================================================
+function openEditModal(idx) {
+  const records = loadRecords();
+  const r = records[idx];
+  if (!r) return;
+  document.getElementById('edit-idx').value = idx;
+  document.getElementById('e-date').value = r.date;
+  document.getElementById('e-dow').value = r.dow;
+
+  const oppSel = document.getElementById('e-opponent');
+  if (r.opponentType === '__intl__' || r.opponentType === '__other__') {
+    oppSel.value = r.opponentType;
+    document.getElementById('e-opponent-custom-wrap').style.display = '';
+    document.getElementById('e-opponent-custom').value = r.opponentCustom || r.opponent;
+    document.getElementById('e-opponent-custom-label').textContent = r.opponentType === '__intl__' ? '国名' : 'チーム名';
+  } else {
+    oppSel.value = r.opponent;
+    document.getElementById('e-opponent-custom-wrap').style.display = 'none';
+  }
+
+  document.getElementById('e-stance').value = r.stance;
+
+  const stadSel = document.getElementById('e-stadium');
+  if (r.stadiumType === '__other__') {
+    stadSel.value = '__other__';
+    document.getElementById('e-stadium-custom-wrap').style.display = '';
+    document.getElementById('e-stadium-custom').value = r.stadiumCustom || r.stadium;
+  } else {
+    stadSel.value = r.stadium;
+    document.getElementById('e-stadium-custom-wrap').style.display = 'none';
+  }
+
+  document.getElementById('e-cancel').checked = r.cancel;
+  document.getElementById('e-score-section').style.opacity = r.cancel ? '0.3' : '1';
+  document.getElementById('e-score-section').style.pointerEvents = r.cancel ? 'none' : '';
+  document.getElementById('e-score-my').value = r.cancel ? '' : r.scoreMyTeam;
+  document.getElementById('e-score-opp').value = r.cancel ? '' : r.scoreOpponent;
+  document.getElementById('e-comment').value = r.comment || '';
+
+  document.querySelectorAll('input[name="e-satisfaction"]').forEach(el => {
+    el.checked = parseInt(el.value) === r.satisfaction;
+  });
+
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+}
+
+async function saveEdit() {
+  const idx = parseInt(document.getElementById('edit-idx').value);
+  const records = loadRecords();
+  const r = records[idx];
+  if (!r) return;
+
+  const date = document.getElementById('e-date').value;
+  const dt = new Date(date + 'T00:00:00');
+  const dow = DAYS[dt.getDay()];
+  const opponentSel = document.getElementById('e-opponent').value;
+  const opponentCustom = document.getElementById('e-opponent-custom').value.trim();
+  const stadiumSel = document.getElementById('e-stadium').value;
+  const stadiumCustom = document.getElementById('e-stadium-custom').value.trim();
+  const cancel = document.getElementById('e-cancel').checked;
+  const satEl = document.querySelector('input[name="e-satisfaction"]:checked');
+
+  records[idx] = {
+    ...r,
+    date,
+    dow,
+    opponent: (opponentSel === '__intl__' || opponentSel === '__other__') ? opponentCustom : opponentSel,
+    opponentType: opponentSel,
+    opponentCustom,
+    stance: document.getElementById('e-stance').value,
+    stadium: stadiumSel === '__other__' ? stadiumCustom : stadiumSel,
+    stadiumType: stadiumSel,
+    stadiumCustom,
+    cancel,
+    scoreMyTeam: cancel ? '-' : document.getElementById('e-score-my').value,
+    scoreOpponent: cancel ? '-' : document.getElementById('e-score-opp').value,
+    comment: document.getElementById('e-comment').value.trim(),
+    satisfaction: satEl ? parseInt(satEl.value) : 0,
+  };
+
+  saveRecords(records);
+  closeEditModal();
+  renderDetailTable();
+  showToast('記録を更新しました', 'success');
+
+  if (document.getElementById('gh-auto-sync').checked) {
+    await pushToGithub('試合記録の編集');
+  }
+}
+
+// ============================================================
+//  DELETE MODAL
+// ============================================================
+function openDeleteModal(idx) {
+  document.getElementById('delete-idx').value = idx;
+  document.getElementById('delete-modal').classList.add('open');
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').classList.remove('open');
+}
+
+async function confirmDelete() {
+  const idx = parseInt(document.getElementById('delete-idx').value);
+  const records = loadRecords();
+  records.splice(idx, 1);
+  saveRecords(records);
+  closeDeleteModal();
+  renderDetailTable();
+  showToast('記録を削除しました', 'error');
+
+  if (document.getElementById('gh-auto-sync').checked) {
+    await pushToGithub('試合記録の削除');
+  }
+}
+
+// Close modals on overlay click
+document.getElementById('edit-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditModal();
+});
+document.getElementById('delete-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDeleteModal();
+});
+
+// ============================================================
+//  GITHUB API FUNCTIONS
+// ============================================================
+function saveGithubConfig() {
+  const config = {
+    user: document.getElementById('gh-user').value.trim(),
+    repo: document.getElementById('gh-repo').value.trim(),
+    path: document.getElementById('gh-path').value.trim(),
+    token: document.getElementById('gh-token').value.trim()
+  };
+  localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(config));
+  showToast('GitHub設定を保存しました', 'success');
+  if (config.user && config.repo && config.path) fetchGithubCSV();
+}
+
+function loadGithubConfig() {
+  const raw = localStorage.getItem(GH_CONFIG_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function fetchGithubCSV() {
+  const config = loadGithubConfig();
+  if (!config || !config.user || !config.repo || !config.path) return;
+  
+  // UI反映
+  document.getElementById('gh-user').value = config.user;
+  document.getElementById('gh-repo').value = config.repo;
+  document.getElementById('gh-path').value = config.path;
+  document.getElementById('gh-token').value = config.token;
+
+  const statusEl = document.getElementById('sync-status');
+  statusEl.textContent = '同期中...';
+  statusEl.style.color = 'var(--text-muted)';
+
+  // Raw URLの構築
+  const url = `https://raw.githubusercontent.com/${config.user}/${config.repo}/main/${config.path}?t=${Date.now()}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('ファイルが取得できませんでした。パスや公開設定を確認してください。');
+    const csvText = await response.text();
+    
+    const result = Papa.parse(csvText.replace(/^\uFEFF/, ''), {
+      header: true, 
+      skipEmptyLines: true,
+      dynamicTyping: true
+    });
+
+    const records = result.data.map(r => ({
+      ...r,
+      cancel: String(r.cancel).toLowerCase() === 'true',
+      satisfaction: parseInt(r.satisfaction) || 0,
+      scoreMyTeam: r.scoreMyTeam === null ? '-' : String(r.scoreMyTeam),
+      scoreOpponent: r.scoreOpponent === null ? '-' : String(r.scoreOpponent)
+    }));
+    
+    saveRecords(records);
+    statusEl.textContent = `✅ GitHubから${records.length}件のデータを同期しました (${new Date().toLocaleTimeString()})`;
+    statusEl.style.color = 'var(--win)';
+    renderTop();
+    if (document.getElementById('tab-stats').classList.contains('active')) renderStats();
+    if (document.getElementById('tab-detail').classList.contains('active')) renderDetailTable();
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '❌ 同期エラー: ' + err.message;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+async function pushToGithub(message) {
+  const config = loadGithubConfig();
+  if (!config || !config.token) {
+    showToast('GitHubトークンが設定されていないため、自動同期をスキップしました', 'warning');
+    return;
+  }
+
+  const statusEl = document.getElementById('sync-status');
+  statusEl.textContent = 'GitHubへ反映中...';
+  statusEl.style.color = 'var(--gold)';
+
+  try {
+    // 1. 現在のファイルのSHAを取得
+    const apiUrl = `https://api.github.com/repos/${config.user}/${config.repo}/contents/${config.path}`;
+    const getRes = await fetch(apiUrl, {
+      headers: { 'Authorization': `token ${config.token}` }
+    });
+    
+    let sha = null;
+    if (getRes.ok) {
+      const data = await getRes.json();
+      sha = data.sha;
+    }
+
+    // 2. CSVデータの作成
+    const records = loadRecords();
+    const headers = ['id','date','dow','opponent','opponentType','opponentCustom','stance','stadium','stadiumType','stadiumCustom','cancel','scoreMyTeam','scoreOpponent','comment','satisfaction'];
+    const csvContent = [
+      headers.join(','),
+      ...records.map(r => headers.map(h => {
+        let v = r[h] === undefined ? '' : r[h];
+        if (typeof v === 'string' && (v.includes(',') || v.includes('"') || v.includes('\n'))) {
+          v = '"' + v.replace(/"/g, '""') + '"';
+        }
+        return v;
+      }).join(','))
+    ].join('\n');
+
+    // 3. GitHub APIで更新
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: `[Baseball App] ${message}`,
+        content: btoa(unescape(encodeURIComponent(csvContent))),
+        sha: sha
+      })
+    });
+
+    if (!putRes.ok) {
+      const errData = await putRes.json();
+      throw new Error(errData.message || '更新に失敗しました');
+    }
+
+    statusEl.textContent = `✅ GitHubへ反映完了 (${new Date().toLocaleTimeString()})`;
+    statusEl.style.color = 'var(--win)';
+    showToast('GitHubのCSVを更新しました', 'success');
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '❌ GitHub反映エラー: ' + err.message;
+    statusEl.style.color = 'var(--red)';
+    showToast('GitHubへの反映に失敗しました', 'error');
+  }
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+(function init() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  document.getElementById('f-date').value = `${yyyy}-${mm}-${dd}`;
+  updateDayOfWeek();
+  
+  const config = loadGithubConfig();
+  if (config) {
+    fetchGithubCSV();
+  } else {
+    renderTop();
+  }
+})();
+</script>
+</body>
+</html>
