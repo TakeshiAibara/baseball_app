@@ -222,6 +222,31 @@
     .stadium-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
     .stadium-table-card h4 { margin-bottom: 1rem; color: var(--accent); border-left: 4px solid var(--accent); padding-left: 0.5rem; }
 
+    /* ===== MODAL OVERLAY ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      display: none; /* 初期状態は非表示 */
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--navy-dark);
+      width: 100%;
+      max-width: 600px;
+      border-radius: var(--radius);
+      padding: 2rem;
+      border: 1px solid var(--border);
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+    }
+
     @media (max-width: 768px) {
       .streak-container { grid-template-columns: 1fr; }
       .stat-grid { grid-template-columns: 1fr 1fr; }
@@ -429,7 +454,7 @@
   </div>
 </main>
 
-<!-- EDIT MODAL -->
+<!-- EDIT MODAL (モーダルオーバーレイ内に配置) -->
 <div id="edit-modal" class="modal-overlay">
   <div class="modal">
     <h3 class="card-title">EDIT RECORD</h3>
@@ -714,9 +739,27 @@
       type: 'line',
       data: {
         labels: sorted.map((_,i) => i+1),
-        datasets: [{ label: 'TREND', data, borderColor: '#38bdf8', tension: 0.4, fill: true, backgroundColor: 'rgba(56, 189, 248, 0.1)', pointRadius: 0 }]
+        datasets: [{ 
+          label: 'TREND', 
+          data, 
+          borderColor: '#38bdf8', 
+          tension: 0.3, 
+          fill: false, 
+          pointRadius: 4, 
+          pointBackgroundColor: '#38bdf8',
+          pointBorderColor: '#fff',
+          pointHoverRadius: 6
+        }]
       },
-      options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }, plugins: { legend: { display: false } } }
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        scales: { 
+          x: { grid: { display: false }, ticks: { color: '#94a3b8' } }, 
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } } 
+        }, 
+        plugins: { legend: { display: false } } 
+      }
     });
   }
 
@@ -758,19 +801,31 @@
       data: {
         labels: DAYS,
         datasets: [
-          { label: '勝', data: data.map(d => d.w), backgroundColor: '#10b981', stack: 's1' },
-          { label: '負', data: data.map(d => d.l), backgroundColor: '#f43f5e', stack: 's1' },
-          { label: '分', data: data.map(d => d.dr), backgroundColor: '#94a3b8', stack: 's1' },
-          { label: '勝率 (%)', data: data.map(d => d.wr), type: 'line', borderColor: '#fbbf24', backgroundColor: '#fbbf24', yAxisID: 'y1', tension: 0.4, pointRadius: 4 }
+          { 
+            label: '勝率 (%)', 
+            data: data.map(d => d.wr), 
+            type: 'line', 
+            borderColor: '#fbbf24', 
+            backgroundColor: '#fbbf24', 
+            yAxisID: 'y1', 
+            tension: 0.4, 
+            pointRadius: 5, 
+            pointHoverRadius: 8,
+            order: 0, // 前面に表示
+            zIndex: 10
+          },
+          { label: '勝', data: data.map(d => d.w), backgroundColor: '#10b981', stack: 's1', order: 1 },
+          { label: '負', data: data.map(d => d.l), backgroundColor: '#f43f5e', stack: 's1', order: 1 },
+          { label: '分', data: data.map(d => d.dr), backgroundColor: '#94a3b8', stack: 's1', order: 1 }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: '試合数', color: '#94a3b8' } },
-          y1: { position: 'right', grid: { display: false }, min: 0, max: 100, title: { display: true, text: '勝率 (%)', color: '#fbbf24' } },
-          x: { grid: { display: false } }
+          y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: '試合数', color: '#94a3b8' }, ticks: { color: '#94a3b8' } },
+          y1: { position: 'right', grid: { display: false }, min: 0, max: 100, title: { display: true, text: '勝率 (%)', color: '#fbbf24' }, ticks: { color: '#fbbf24' } },
+          x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
         },
         plugins: { legend: { labels: { color: '#f1f5f9' } } }
       }
@@ -858,19 +913,25 @@
     if (r.opponentType === '__intl__' || r.opponentType === '__other__') {
       document.getElementById('e-opponent-custom-wrap').style.display = '';
       document.getElementById('e-opponent-custom').value = r.opponentCustom;
+    } else {
+      document.getElementById('e-opponent-custom-wrap').style.display = 'none';
     }
     document.getElementById('e-stance').value = r.stance;
     document.getElementById('e-stadium').value = r.stadiumType;
     if (r.stadiumType === '__other__') {
       document.getElementById('e-stadium-custom-wrap').style.display = '';
       document.getElementById('e-stadium-custom').value = r.stadiumCustom;
+    } else {
+      document.getElementById('e-stadium-custom-wrap').style.display = 'none';
     }
     document.getElementById('e-cancel').checked = r.cancel;
-    document.getElementById('e-score-my').value = r.scoreMyTeam;
-    document.getElementById('e-score-opp').value = r.scoreOpponent;
-    document.getElementById('e-comment').value = r.comment;
+    document.getElementById('e-score-my').value = r.scoreMyTeam === '-' ? '0' : r.scoreMyTeam;
+    document.getElementById('e-score-opp').value = r.scoreOpponent === '-' ? '0' : r.scoreOpponent;
+    document.getElementById('e-comment').value = r.comment || '';
     const sat = document.querySelector(`input[name="e-satisfaction"][value="${r.satisfaction}"]`);
     if (sat) sat.checked = true;
+    
+    toggleEditCancelMode();
     document.getElementById('edit-modal').classList.add('active');
   }
   function closeEditModal() { document.getElementById('edit-modal').classList.remove('active'); }
@@ -880,20 +941,22 @@
     const date = document.getElementById('e-date').value;
     const oppType = document.getElementById('e-opponent').value;
     const sat = document.querySelector('input[name="e-satisfaction"]:checked');
+    const cancel = document.getElementById('e-cancel').checked;
+    
     records[idx] = {
       ...records[idx],
       date,
       dow: DAYS[new Date(date + 'T00:00:00').getDay()] + '曜日',
       opponent: (oppType === '__intl__' || oppType === '__other__') ? document.getElementById('e-opponent-custom').value : oppType,
       opponentType: oppType,
-      opponentCustom: document.getElementById('f-opponent-custom').value,
+      opponentCustom: document.getElementById('e-opponent-custom').value,
       stance: document.getElementById('e-stance').value,
       stadium: document.getElementById('e-stadium').value === '__other__' ? document.getElementById('e-stadium-custom').value : document.getElementById('e-stadium').value,
       stadiumType: document.getElementById('e-stadium').value,
       stadiumCustom: document.getElementById('e-stadium-custom').value,
-      cancel: document.getElementById('e-cancel').checked,
-      scoreMyTeam: document.getElementById('e-score-my').value,
-      scoreOpponent: document.getElementById('e-score-opp').value,
+      cancel: cancel,
+      scoreMyTeam: cancel ? '-' : document.getElementById('e-score-my').value,
+      scoreOpponent: cancel ? '-' : document.getElementById('e-score-opp').value,
       comment: document.getElementById('e-comment').value,
       satisfaction: sat ? parseInt(sat.value) : 0
     };
