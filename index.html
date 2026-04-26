@@ -352,11 +352,35 @@
     }
     .league-table th { background: var(--navy-light); }
 
-    /* ===== STADIUM CHART SECTION ===== */
-    .stadium-chart-container {
-      width: 100%;
-      height: 400px;
+    /* ===== STADIUM STATS SECTION ===== */
+    .stadium-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
       margin-top: 10px;
+    }
+    .stadium-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .stadium-table th, .stadium-table td {
+      padding: 8px;
+      border-bottom: 1.5px solid var(--border);
+      text-align: center;
+    }
+    .stadium-table th {
+      background: var(--navy-light);
+      color: var(--navy);
+      font-weight: 600;
+    }
+    .stadium-table td:first-child {
+      text-align: left;
+      font-weight: 600;
+    }
+    .stadium-table .win-rate {
+      font-weight: 700;
+      color: var(--navy);
     }
 
     /* ===== FILTER BAR ===== */
@@ -860,11 +884,37 @@
     <ul class="rank-list" id="stadium-rank-list"></ul>
   </div>
 
-  <!-- 球場別勝率（棒グラフ） -->
-  <div class="card">
-    <div class="card-title">📍 球場別勝率</div>
-    <div class="stadium-chart-container">
-      <canvas id="chart-stadium-winrate"></canvas>
+  <!-- 球場別勝率（表形式） -->
+  <div class="card" style="grid-column: 1 / -1;">
+    <div class="card-title">📍 球場別成績</div>
+    <div class="stadium-stats-grid">
+      <div>
+        <h4 style="margin-bottom:10px; color:var(--navy);">セ・リーグ球場</h4>
+        <table class="stadium-table">
+          <thead>
+            <tr><th>球場</th><th>試合</th><th>勝</th><th>負</th><th>分</th><th>勝率</th></tr>
+          </thead>
+          <tbody id="stadium-tbody-central"></tbody>
+        </table>
+      </div>
+      <div>
+        <h4 style="margin-bottom:10px; color:var(--navy);">パ・リーグ球場</h4>
+        <table class="stadium-table">
+          <thead>
+            <tr><th>球場</th><th>試合</th><th>勝</th><th>負</th><th>分</th><th>勝率</th></tr>
+          </thead>
+          <tbody id="stadium-tbody-pacific"></tbody>
+        </table>
+      </div>
+      <div>
+        <h4 style="margin-bottom:10px; color:var(--navy);">その他</h4>
+        <table class="stadium-table">
+          <thead>
+            <tr><th>球場</th><th>試合</th><th>勝</th><th>負</th><th>分</th><th>勝率</th></tr>
+          </thead>
+          <tbody id="stadium-tbody-other"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -1716,8 +1766,8 @@ function renderStadiumRank(records) {
 }
 
 function renderStadiumWinrateChart(records) {
-  destroyChart('chart-stadium-winrate');
-  const ctx = document.getElementById('chart-stadium-winrate').getContext('2d');
+  const central = ['東京ドーム','甲子園球場','横浜スタジアム','MAZDA Zoom-Zoom スタジアム広島','バンテリンドームナゴヤ','明治神宮野球場'];
+  const pacific = ['みずほPayPayドーム福岡','京セラドーム大阪','ZOZOマリンスタジアム','楽天モバイルパーク宮城','ベルーナドーム','エスコンフィールドHOKKAIDO'];
 
   const stadiumData = {};
   records.forEach(r => {
@@ -1731,53 +1781,39 @@ function renderStadiumWinrateChart(records) {
     stadiumData[s].total++;
   });
 
-  const sorted = Object.entries(stadiumData)
-    .sort((a,b) => b[1].total - a[1].total)
-    .slice(0, 15);
-
-  const labels = sorted.map(d => d[0]);
-  const wins = sorted.map(d => d[1].w);
-  const loses = sorted.map(d => d[1].l);
-  const draws = sorted.map(d => d[1].d);
-  const cancels = sorted.map(d => d[1].c);
-
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        { label: '勝', data: wins, backgroundColor: '#27ae60' },
-        { label: '負', data: loses, backgroundColor: '#e74c3c' },
-        { label: '分', data: draws, backgroundColor: '#95a5a6' },
-        { label: '中止', data: cancels, backgroundColor: '#bdc3c7' }
-      ]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          callbacks: {
-            afterLabel: (context) => {
-              const d = sorted[context.dataIndex][1];
-              const wr = (d.w / (d.w + d.l || 1) * 100).toFixed(1);
-              return `勝率: ${wr}% (中止除く)`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: { stacked: true, title: { display: true, text: '試合数' } },
-        y: { stacked: true }
-      }
+  const renderTable = (id, list, isOther = false) => {
+    const tbody = document.getElementById(id);
+    const filtered = Object.entries(stadiumData).filter(([name]) => isOther ? (!central.includes(name) && !pacific.includes(name)) : list.includes(name));
+    
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted);">データなし</td></tr>';
+      return;
     }
-  });
+
+    tbody.innerHTML = filtered.sort((a,b) => b[1].total - a[1].total).map(([name, d]) => {
+      const wr = (d.w + d.l > 0) ? (d.w / (d.w + d.l)).toFixed(3) : '.000';
+      return `<tr>
+        <td>${name}</td>
+        <td>${d.total}</td>
+        <td style="color:var(--win);">${d.w}</td>
+        <td style="color:var(--lose);">${d.l}</td>
+        <td>${d.d}</td>
+        <td class="win-rate">${wr}</td>
+      </tr>`;
+    }).join('');
+  };
+
+  renderTable('stadium-tbody-central', central);
+  renderTable('stadium-tbody-pacific', pacific);
+  renderTable('stadium-tbody-other', [], true);
 }
 
 function renderStreaks(records) {
-  const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
+  // 日付順にソート（同じ日付の場合はID順など、一意の順序を保つ）
+  const sorted = [...records].sort((a,b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (a.id || 0) - (b.id || 0);
+  });
 
   let maxWin = 0, maxWinStart = '', maxWinEnd = '';
   let maxLose = 0, maxLoseStart = '', maxLoseEnd = '';
@@ -1790,20 +1826,24 @@ function renderStreaks(records) {
       if (curWin === 0) curWinStart = r.date;
       curWin++;
       curLose = 0;
-      if (curWin > maxWin) { maxWin = curWin; maxWinStart = curWinStart; maxWinEnd = r.date; }
+      if (curWin >= maxWin) { maxWin = curWin; maxWinStart = curWinStart; maxWinEnd = r.date; }
     } else if (res === '負') {
       if (curLose === 0) curLoseStart = r.date;
       curLose++;
       curWin = 0;
-      if (curLose > maxLose) { maxLose = curLose; maxLoseStart = curLoseStart; maxLoseEnd = r.date; }
+      if (curLose >= maxLose) { maxLose = curLose; maxLoseStart = curLoseStart; maxLoseEnd = r.date; }
+    } else if (res === '引き分け' || res === '中止') {
+      // 引き分けや中止は連勝・連敗を途切れさせない（変化ゼロ）
+      // ただし、現在の連勝・連敗が0の場合は何もしない
     } else {
+      // それ以外（未入力など）はリセット
       curWin = 0; curLose = 0;
     }
   });
 
-  document.getElementById('max-win-streak').textContent = `${maxWin}連勝`;
+  document.getElementById('max-win-streak').textContent = maxWin > 0 ? `${maxWin}連勝` : '0連勝';
   document.getElementById('max-win-period').textContent = maxWin > 0 ? `${maxWinStart} 〜 ${maxWinEnd}` : '—';
-  document.getElementById('max-lose-streak').textContent = `${maxLose}連敗`;
+  document.getElementById('max-lose-streak').textContent = maxLose > 0 ? `${maxLose}連敗` : '0連敗';
   document.getElementById('max-lose-period').textContent = maxLose > 0 ? `${maxLoseStart} 〜 ${maxLoseEnd}` : '—';
 }
 
@@ -2075,9 +2115,11 @@ async function fetchGithubCSV() {
     saveRecords(records);
     statusEl.textContent = `✅ GitHubから${records.length}件のデータを同期しました (${new Date().toLocaleTimeString()})`;
     statusEl.style.color = 'var(--win)';
+    
+    // 全ての表示を更新
     renderTop();
-    if (document.getElementById('tab-stats').classList.contains('active')) renderStats();
-    if (document.getElementById('tab-detail').classList.contains('active')) renderDetailTable();
+    renderStats();
+    renderDetailTable();
   } catch (err) {
     console.error(err);
     statusEl.textContent = '❌ 同期エラー: ' + err.message;
