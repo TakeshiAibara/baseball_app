@@ -2034,13 +2034,29 @@ async function fetchGithubCSV() {
   statusEl.textContent = '同期中...';
   statusEl.style.color = 'var(--text-muted)';
 
-  // Raw URLの構築
-  const url = `https://raw.githubusercontent.com/${config.user}/${config.repo}/main/${config.path}?t=${Date.now()}`;
+  // API URLの構築（Raw URLはブランチ名に依存するため、API経由で取得を試みる）
+  const apiUrl = `https://api.github.com/repos/${config.user}/${config.repo}/contents/${config.path}`;
 
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('ファイルが取得できませんでした。パスや公開設定を確認してください。');
-    const csvText = await response.text();
+    const response = await fetch(apiUrl, {
+      headers: config.token ? { 'Authorization': `token ${config.token}` } : {}
+    });
+    
+    if (response.status === 404) {
+      // ファイルが存在しない場合は、新規作成を促すか空データで初期化
+      statusEl.textContent = 'ℹ️ GitHub上にCSVファイルが見つかりません。最初の記録を保存すると自動作成されます。';
+      statusEl.style.color = 'var(--gold)';
+      return;
+    }
+    
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(`GitHub APIエラー: ${errData.message} (Status: ${response.status})`);
+    }
+    
+    const data = await response.json();
+    // Base64デコード（UTF-8対応）
+    const csvText = decodeURIComponent(escape(atob(data.content)));
     
     const result = Papa.parse(csvText.replace(/^\uFEFF/, ''), {
       header: true, 
@@ -2066,6 +2082,11 @@ async function fetchGithubCSV() {
     console.error(err);
     statusEl.textContent = '❌ 同期エラー: ' + err.message;
     statusEl.style.color = 'var(--red)';
+    if (err.message.includes('401') || err.message.includes('Bad credentials')) {
+      statusEl.textContent += ' (トークンが無効です)';
+    } else if (err.message.includes('404')) {
+      statusEl.textContent += ' (リポジトリ名やパスが間違っている可能性があります)';
+    }
   }
 }
 
